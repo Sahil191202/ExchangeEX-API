@@ -1,12 +1,14 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-
-const SALT_ROUNDS = 12;
 
 /**
- * User Schema
- * Supports both email/password registration and phone OTP / Google OAuth.
- * refreshToken is stored hashed to allow server-side invalidation.
+ * User Schema — passwordless authentication only.
+ *
+ * Supported login methods:
+ *   1. Phone + Firebase OTP  (firebaseUid)
+ *   2. Email OTP             (emailOtpHash + emailOtpExpires)
+ *   3. Google OAuth          (googleId)
+ *
+ * No password field exists anywhere in this schema.
  */
 const userSchema = new mongoose.Schema(
   {
@@ -21,8 +23,8 @@ const userSchema = new mongoose.Schema(
 
     email: {
       type: String,
-      required: [true, 'Email is required'],
       unique: true,
+      sparse: true,       // allow null — phone-only users have no email initially
       lowercase: true,
       trim: true,
       match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
@@ -31,20 +33,14 @@ const userSchema = new mongoose.Schema(
     phone: {
       type: String,
       unique: true,
-      sparse: true, // allow null/undefined without unique conflict
+      sparse: true,       // allow null — email/OAuth users may have no phone initially
       trim: true,
       match: [/^\+?[1-9]\d{7,14}$/, 'Please provide a valid phone number with country code'],
     },
 
-    password: {
-      type: String,
-      minlength: [8, 'Password must be at least 8 characters'],
-      select: false, // never return password in queries by default
-    },
-
     profilePicture: {
-      url: { type: String, default: '' },
-      publicId: { type: String, default: '' }, // Cloudinary public_id for deletion
+      url:      { type: String, default: '' },
+      publicId: { type: String, default: '' },
     },
 
     role: {
@@ -53,27 +49,27 @@ const userSchema = new mongoose.Schema(
       default: 'user',
     },
 
-    // ─── Verification ─────────────────────────────────────────────────────
+    // ─── Verification status ───────────────────────────────────────────────
     isEmailVerified: { type: Boolean, default: false },
     isPhoneVerified: { type: Boolean, default: false },
 
-    emailVerificationToken: { type: String, select: false },
-    emailVerificationExpires: { type: Date, select: false },
+    // ─── Email OTP ────────────────────────────────────────────────────────
+    // 6-digit code stored as bcrypt hash for security
+    emailOtpHash:    { type: String, select: false },
+    emailOtpExpires: { type: Date,   select: false },
 
-    // ─── Password Reset ───────────────────────────────────────────────────
-    passwordResetToken: { type: String, select: false },
-    passwordResetExpires: { type: Date, select: false },
+    // ─── Firebase (Phone OTP) ─────────────────────────────────────────────
+    firebaseUid: { type: String, sparse: true },
 
-    // ─── OAuth ────────────────────────────────────────────────────────────
+    // ─── Google OAuth ─────────────────────────────────────────────────────
     googleId: { type: String, sparse: true },
-    firebaseUid: { type: String, sparse: true }, // from Firebase phone auth
 
-    // ─── Auth tokens ──────────────────────────────────────────────────────
+    // ─── Refresh token (stored as SHA-256 hash) ───────────────────────────
     refreshToken: { type: String, select: false },
 
     // ─── Account status ───────────────────────────────────────────────────
-    isBanned: { type: Boolean, default: false },
-    banReason: { type: String, default: '' },
+    isBanned:  { type: Boolean, default: false },
+    banReason: { type: String,  default: '' },
 
     // ─── Subscription tracking ────────────────────────────────────────────
     freeListingUsed: { type: Boolean, default: false },
@@ -83,18 +79,18 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    // ─── Location (optional, for profile) ────────────────────────────────
+    // ─── Location ─────────────────────────────────────────────────────────
     location: {
-      city: { type: String, default: '' },
-      state: { type: String, default: '' },
+      city:    { type: String, default: '' },
+      state:   { type: String, default: '' },
       country: { type: String, default: 'India' },
     },
 
     lastLoginAt: { type: Date },
   },
   {
-    timestamps: true, // createdAt, updatedAt
-    toJSON: { virtuals: true },
+    timestamps: true,
+    toJSON:   { virtuals: true },
     toObject: { virtuals: true },
   }
 );
@@ -106,62 +102,32 @@ userSchema.index({ googleId: 1 });
 userSchema.index({ firebaseUid: 1 });
 userSchema.index({ role: 1, createdAt: -1 });
 
-// ─── Virtual: full name ────────────────────────────────────────────────────────
-// (kept as username here; extend with firstName/lastName if needed)
-userSchema.virtual('displayName').get(function () {
-  return this.username;
-});
-
-// ─── Pre-save hook: hash password ─────────────────────────────────────────────
-userSchema.pre('save', async function (next) {
-  // Only hash if password field was modified
-  if (!this.isModified('password') || !this.password) return next();
-
-  try {
-    this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
-    next();
-  } catch (err) {
-    next(err);
-  }
-});
-
 // ─── Instance Methods ─────────────────────────────────────────────────────────
 
 /**
- * Compare a plain-text password against the stored hash.
- * @param {string} candidatePassword
- * @returns {Promise<boolean>}
+ * Check whether the user has at least one verified login method.
  */
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  if (!this.password) return false;
-  return bcrypt.compare(candidatePassword, this.password);
+userSchema.methods.isVerified = function () {
+  return this.isEmailVerified || this.isPhoneVerified;
 };
 
 /**
- * Check if the user can create a new listing for free.
- * First listing is always free.
- */
-userSchema.methods.canPostFree = function () {
-  return !this.freeListingUsed;
-};
-
-/**
- * Return a safe public profile (strip sensitive fields).
+ * Return a safe public profile — never expose OTP hashes or tokens.
  */
 userSchema.methods.toPublicProfile = function () {
   return {
-    _id: this._id,
-    username: this.username,
-    email: this.email,
-    phone: this.phone,
-    profilePicture: this.profilePicture,
-    role: this.role,
+    _id:             this._id,
+    username:        this.username,
+    email:           this.email,
+    phone:           this.phone,
+    profilePicture:  this.profilePicture,
+    role:            this.role,
     isEmailVerified: this.isEmailVerified,
     isPhoneVerified: this.isPhoneVerified,
-    isBanned: this.isBanned,
-    location: this.location,
+    isBanned:        this.isBanned,
+    location:        this.location,
     freeListingUsed: this.freeListingUsed,
-    createdAt: this.createdAt,
+    createdAt:       this.createdAt,
   };
 };
 

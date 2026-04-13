@@ -1,54 +1,59 @@
 const authService = require('../services/authService');
 const { ApiResponse, asyncHandler } = require('../utils/apiHelpers');
 
-/**
- * POST /api/auth/register
- * Register with email + password + phone
- */
-const register = asyncHandler(async (req, res) => {
-  const { user, tokens } = await authService.registerWithEmail(req.body);
-
-  res.status(201).json(
-    new ApiResponse(201, {
-      user: user.toPublicProfile(),
-      ...tokens,
-    }, 'Registration successful. Please check your email to verify your account.')
-  );
-});
+// ─── Phone OTP (Firebase) ─────────────────────────────────────────────────────
 
 /**
- * POST /api/auth/login
- * Login with email/phone + password
+ * POST /api/auth/phone/verify
+ * Client already completed Firebase OTP on the device.
+ * Sends the Firebase ID token here for server-side verification.
  */
-const login = asyncHandler(async (req, res) => {
-  const { user, tokens } = await authService.loginWithPassword(req.body);
+const phoneVerify = asyncHandler(async (req, res) => {
+  const { user, tokens, isNewUser } = await authService.loginWithPhoneOTP(req.body);
 
   res.status(200).json(
     new ApiResponse(200, {
       user: user.toPublicProfile(),
       ...tokens,
-    }, 'Login successful')
+      isNewUser,           // client uses this to redirect to profile completion
+    }, isNewUser ? 'Phone verified. Please complete your profile.' : 'Login successful.')
+  );
+});
+
+// ─── Email OTP ────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/auth/email/send-otp
+ * Request a 6-digit OTP to be sent to the given email address.
+ */
+const emailSendOtp = asyncHandler(async (req, res) => {
+  const result = await authService.sendEmailOtp(req.body);
+
+  res.status(200).json(
+    new ApiResponse(200, result, `OTP sent to ${req.body.email}. Valid for 10 minutes.`)
   );
 });
 
 /**
- * POST /api/auth/phone-login
- * Login or register via Firebase phone OTP
+ * POST /api/auth/email/verify-otp
+ * Submit the 6-digit OTP to complete email login / registration.
  */
-const phoneLogin = asyncHandler(async (req, res) => {
-  const { user, tokens } = await authService.loginWithPhoneOTP(req.body);
+const emailVerifyOtp = asyncHandler(async (req, res) => {
+  const { user, tokens } = await authService.verifyEmailOtp(req.body);
 
   res.status(200).json(
     new ApiResponse(200, {
       user: user.toPublicProfile(),
       ...tokens,
-    }, 'Phone login successful')
+    }, 'Email verified. Login successful.')
   );
 });
+
+// ─── Google OAuth ─────────────────────────────────────────────────────────────
 
 /**
  * POST /api/auth/google
- * Login or register via Google OAuth
+ * Login or register using a Google ID token from the client.
  */
 const googleLogin = asyncHandler(async (req, res) => {
   const { user, tokens } = await authService.loginWithGoogle(req.body);
@@ -57,60 +62,70 @@ const googleLogin = asyncHandler(async (req, res) => {
     new ApiResponse(200, {
       user: user.toPublicProfile(),
       ...tokens,
-    }, 'Google login successful')
+    }, 'Google login successful.')
   );
 });
+
+// ─── Token Refresh ────────────────────────────────────────────────────────────
 
 /**
  * POST /api/auth/refresh
- * Get new access + refresh token pair
+ * Exchange a valid refresh token for a new token pair.
  */
 const refreshToken = asyncHandler(async (req, res) => {
-  const { refreshToken: token } = req.body;
-  const { tokens } = await authService.refreshTokens(token);
+  const { tokens } = await authService.refreshTokens(req.body.refreshToken);
 
   res.status(200).json(
-    new ApiResponse(200, tokens, 'Tokens refreshed successfully')
+    new ApiResponse(200, tokens, 'Tokens refreshed.')
   );
 });
 
-/**
- * GET /api/auth/verify-email?token=xxx
- * Verify email from the link sent in registration email
- */
-const verifyEmail = asyncHandler(async (req, res) => {
-  const { token } = req.query;
-  if (!token) {
-    return res.status(400).json(new ApiResponse(400, null, 'Verification token is required'));
-  }
-
-  await authService.verifyEmail(token);
-
-  res.status(200).json(
-    new ApiResponse(200, null, 'Email verified successfully. You can now log in.')
-  );
-});
+// ─── Logout ───────────────────────────────────────────────────────────────────
 
 /**
- * POST /api/auth/logout
- * Invalidate refresh token on server side
+ * POST /api/auth/logout  🔒
+ * Invalidate the server-side refresh token.
  */
 const logout = asyncHandler(async (req, res) => {
   await authService.logout(req.user._id);
 
   res.status(200).json(
-    new ApiResponse(200, null, 'Logged out successfully')
+    new ApiResponse(200, null, 'Logged out successfully.')
   );
 });
 
+// ─── Get current user ─────────────────────────────────────────────────────────
+
 /**
- * GET /api/auth/me
- * Get the currently authenticated user's profile
+ * GET /api/auth/me  🔒
  */
 const getMe = asyncHandler(async (req, res) => {
   res.status(200).json(
-    new ApiResponse(200, { user: req.user.toPublicProfile() }, 'Profile fetched')
+    new ApiResponse(200, { user: req.user.toPublicProfile() }, 'Profile fetched.')
   );
 });
 
-module.exports = { register, login, phoneLogin, googleLogin, refreshToken, verifyEmail, logout, getMe };
+// ─── Complete profile (after first phone OTP registration) ───────────────────
+
+/**
+ * PATCH /api/auth/complete-profile  🔒
+ * Lets a newly phone-registered user set a real username and/or add their email.
+ */
+const completeProfile = asyncHandler(async (req, res) => {
+  const user = await authService.completeProfile(req.user._id, req.body);
+
+  res.status(200).json(
+    new ApiResponse(200, { user: user.toPublicProfile() }, 'Profile updated.')
+  );
+});
+
+module.exports = {
+  phoneVerify,
+  emailSendOtp,
+  emailVerifyOtp,
+  googleLogin,
+  refreshToken,
+  logout,
+  getMe,
+  completeProfile,
+};
