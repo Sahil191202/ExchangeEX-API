@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# ExchangeEX Platform — Production Backend
-=======
 # ExchangeEX-API — Production Backend
->>>>>>> bd539b351877c11766dc2a1cb580edad1fd433a0
 
 A production-ready classified ads platform backend built with Node.js, Express, and MongoDB.
 
