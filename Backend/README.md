@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # ExchangeEX Platform — Production Backend
+=======
+# ExchangeEX-API — Production Backend
+>>>>>>> bd539b351877c11766dc2a1cb580edad1fd433a0
 
 A production-ready classified ads platform backend built with Node.js, Express, and MongoDB.
 
@@ -114,6 +118,7 @@ See `.env.example` for the full list. Key variables:
 - [x] JWT with issuer + audience validation
 - [x] Firebase ID token verified server-side on every phone/Google login
 - [x] Helmet security headers
+<<<<<<< HEAD
 - [x] CORS whitelist (configured via `CLIENT_URL` env var)
 - [x] Global rate limiter + strict per-IP limiter on auth routes
 - [x] OTP send endpoint limited to 3 requests/minute to prevent SMS/email abuse
@@ -135,3 +140,13 @@ db.users.updateOne(
 ```
 
 Then log in again — the new JWT will carry the `admin` role.
+=======
+- [x] CORS whitelist
+- [x] Rate limiting on all routes (strict on auth)
+- [x] Input validation with Joi (strips unknown fields)
+- [x] Razorpay webhook HMAC verification
+- [x] Firebase token server-side verification
+- [x] Password field excluded from all queries by default
+- [x] Mongoose validation on all schemas
+- [x] Global error handler (no stack traces in production)
+>>>>>>> bd539b351877c11766dc2a1cb580edad1fd433a0
