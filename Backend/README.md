@@ -1,4 +1,4 @@
-# OLX Platform — Production Backend
+# ExchangeEX-API — Production Backend
 
 A production-ready classified ads platform backend built with Node.js, Express, and MongoDB.
 
