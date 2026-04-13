@@ -112,7 +112,7 @@ const sendEmailOtp = async ({ email }) => {
   }
 
   // Send OTP email (non-blocking — don't fail the API if email is slow)
-  emailService.sendEmailOtp(user, otp).catch((err) =>
+  emailService.sendEmailOtp(user.email, otp).catch((err) =>
     logger.error(`Email OTP send failed for ${email}: ${err.message}`)
   );
 

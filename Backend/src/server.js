@@ -42,7 +42,7 @@ const startServer = async () => {
     httpServer.listen(PORT, () => {
       logger.info(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  OLX Platform API — ${process.env.NODE_ENV?.toUpperCase()} mode
+  ExchangeEx Platform API — ${process.env.NODE_ENV?.toUpperCase()} mode
   HTTP  : http://localhost:${PORT}
   Health: http://localhost:${PORT}/api/health
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

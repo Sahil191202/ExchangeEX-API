@@ -1,5 +1,5 @@
-const nodemailer = require('nodemailer');
-const logger = require('../utils/logger');
+const nodemailer = require("nodemailer");
+const logger = require("../utils/logger");
 
 let transporter;
 
@@ -13,7 +13,7 @@ const getTransporter = () => {
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT, 10),
-    secure: process.env.SMTP_SECURE === 'true',
+    secure: process.env.SMTP_SECURE === "true",
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -40,7 +40,7 @@ const sendEmail = async ({ to, subject, html, text }) => {
       to,
       subject,
       html,
-      text: text || html.replace(/<[^>]+>/g, ''), // strip HTML for plaintext fallback
+      text: text || html.replace(/<[^>]+>/g, ""), // strip HTML for plaintext fallback
     });
 
     logger.info(`Email sent to ${to}: ${info.messageId}`);
@@ -83,6 +83,29 @@ const baseTemplate = (content) => `
 
 // ─── Notification Methods ──────────────────────────────────────────────────────
 
+/*
+Send email with otp 
+*/
+const sendEmailOtp = async (email, otp) => {
+  if (!email || typeof email !== "string") {
+    throw new Error("Invalid email provided to sendEmailOtp");
+  }
+
+  await sendEmail({
+    to: email,
+    subject: "Your OTP Code — ExchangeEx Platform",
+    html: baseTemplate(`
+      <h2>Email Verification OTP</h2>
+      <p>Your OTP is:</p>
+
+      <div class="highlight" style="text-align:center; font-size: 24px;">
+        <strong>${otp}</strong>
+      </div>
+
+      <p>Valid for 5 minutes.</p>
+    `),
+  });
+};
 /**
  * Send welcome + email verification email.
  */
@@ -91,7 +114,7 @@ const sendVerificationEmail = async (user, verificationToken) => {
 
   await sendEmail({
     to: user.email,
-    subject: 'Verify your email — OLX Platform',
+    subject: "Verify your email — OLX Platform",
     html: baseTemplate(`
       <h2>Welcome, ${user.username}! 🎉</h2>
       <p>Thanks for joining OLX Platform. Please verify your email address to get started.</p>
@@ -110,7 +133,7 @@ const sendPasswordResetEmail = async (user, resetToken) => {
 
   await sendEmail({
     to: user.email,
-    subject: 'Password Reset Request — OLX Platform',
+    subject: "Password Reset Request — OLX Platform",
     html: baseTemplate(`
       <h2>Reset Your Password</h2>
       <p>You requested a password reset for your OLX Platform account.</p>
@@ -170,7 +193,7 @@ const sendListingRejectedEmail = async (user, listing) => {
       <h2>Listing Not Approved</h2>
       <div class="highlight">
         <strong>${listing.title}</strong><br>
-        Reason: ${listing.rejectionReason || 'Did not meet our listing guidelines'}
+        Reason: ${listing.rejectionReason || "Did not meet our listing guidelines"}
       </div>
       <p>Unfortunately your listing couldn't be approved at this time. Please review our guidelines and resubmit.</p>
       <a href="${process.env.CLIENT_URL}/listings/new" class="btn">Create New Listing</a>
@@ -181,8 +204,13 @@ const sendListingRejectedEmail = async (user, listing) => {
 /**
  * Confirm a subscription purchase.
  */
-const sendSubscriptionConfirmationEmail = async (user, subscription, transaction) => {
-  const planLabel = subscription.plan === 'bundle' ? '10 Listings Bundle' : 'Single Listing';
+const sendSubscriptionConfirmationEmail = async (
+  user,
+  subscription,
+  transaction,
+) => {
+  const planLabel =
+    subscription.plan === "bundle" ? "10 Listings Bundle" : "Single Listing";
 
   await sendEmail({
     to: user.email,
@@ -193,7 +221,7 @@ const sendSubscriptionConfirmationEmail = async (user, subscription, transaction
         <strong>Plan:</strong> ${planLabel}<br>
         <strong>Amount Paid:</strong> ₹${transaction.amount}<br>
         <strong>Credits:</strong> ${subscription.totalCredits} listing(s)<br>
-        <strong>Valid Until:</strong> ${new Date(subscription.expiresAt).toLocaleDateString('en-IN')}
+        <strong>Valid Until:</strong> ${new Date(subscription.expiresAt).toLocaleDateString("en-IN")}
       </div>
       <p>You can now post ads using your subscription credits.</p>
       <a href="${process.env.CLIENT_URL}/listings/new" class="btn">Post an Ad</a>
@@ -202,6 +230,7 @@ const sendSubscriptionConfirmationEmail = async (user, subscription, transaction
 };
 
 module.exports = {
+  sendEmailOtp,
   sendEmail,
   sendVerificationEmail,
   sendPasswordResetEmail,
